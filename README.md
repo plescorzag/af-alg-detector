@@ -161,7 +161,6 @@ type=SYSCALL ... syscall=socket ... a0=26 ...
 * It detects socket creation attempts but does not prove full exploitation.
 * If seccomp blocks the syscall before it reaches audit, the audit event may not appear.
 * Audit log volume can increase if many workloads repeatedly attempt this syscall.
-* This should be combined with kernel patching and seccomp enforcement.
 
 ---
 
