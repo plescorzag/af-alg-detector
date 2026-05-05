@@ -26,14 +26,54 @@ spec:
             - /bin/bash
             - -c
             - |
+              set -euo pipefail
+
+              echo "[INFO] Node: ${NODE_NAME}"
+
               AUDITCTL="/host/usr/sbin/auditctl"
+
+              if [ ! -x "$AUDITCTL" ]; then
+                echo "[ERROR] auditctl not found on host at $AUDITCTL"
+                echo "[INFO] Trying alternative path..."
+                AUDITCTL="/host/sbin/auditctl"
+              fi
+
+              if [ ! -x "$AUDITCTL" ]; then
+                echo "[ERROR] auditctl not available on this node"
+                sleep infinity
+              fi
+
+              echo "[INFO] Using $AUDITCTL"
+
+              echo "[INFO] Removing previous AF_ALG rules if present..."
+              $AUDITCTL -d always,exit -F arch=b64 -S socket -F a0=0x26 -k af_alg_socket 2>/dev/null || true
+              $AUDITCTL -d always,exit -F arch=b32 -S socket -F a0=0x26 -k af_alg_socket 2>/dev/null || true
+
+              echo "[INFO] Adding AF_ALG detection rules..."
               $AUDITCTL -a always,exit -F arch=b64 -S socket -F a0=0x26 -k af_alg_socket
-              tail -n 0 -F /host/var/log/audit/audit.log
+              $AUDITCTL -a always,exit -F arch=b32 -S socket -F a0=0x26 -k af_alg_socket || true
+
+              echo "[INFO] Active rules:"
+              $AUDITCTL -l | grep af_alg_socket || true
+
+              echo "[INFO] Watching audit log..."
+              tail -n 0 -F /host/var/log/audit/audit.log | while read -r line; do
+                if echo "$line" | grep -q "af_alg_socket"; then
+                  echo "[ALERT][AF_ALG_SOCKET_ATTEMPT][node=${NODE_NAME}] $line"
+                fi
+              done
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
           volumeMounts:
             - name: host-root
               mountPath: /host
+              readOnly: false
       volumes:
         - name: host-root
           hostPath:
             path: /
             type: Directory
+
