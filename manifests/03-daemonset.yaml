@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: af-alg-audit-monitor
+  namespace: af-alg-monitor
+spec:
+  selector:
+    matchLabels:
+      app: af-alg-audit-monitor
+  template:
+    metadata:
+      labels:
+        app: af-alg-audit-monitor
+    spec:
+      serviceAccountName: af-alg-audit-monitor
+      hostPID: true
+      hostNetwork: true
+      tolerations:
+        - operator: Exists
+      containers:
+        - name: monitor
+          image: registry.redhat.io/ubi9/ubi-minimal:latest
+          securityContext:
+            privileged: true
+          command:
+            - /bin/bash
+            - -c
+            - |
+              AUDITCTL="/host/usr/sbin/auditctl"
+              $AUDITCTL -a always,exit -F arch=b64 -S socket -F a0=0x26 -k af_alg_socket
+              tail -n 0 -F /host/var/log/audit/audit.log
+          volumeMounts:
+            - name: host-root
+              mountPath: /host
+      volumes:
+        - name: host-root
+          hostPath:
+            path: /
+            type: Directory
